@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: my-cronjob # Replace with your CronJob's name                     
+spec:
+  schedule: "*/5 * * * *" # Replace with your desired schedule (e.g., "0 0 * * *" for daily at midnight)                                             
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: my-container # Replace with your container's name       
+              image: busybox # Replace with your container image            
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/sh
+                - -c
+                - date; echo "Hello from the Kubernetes CronJob" # Replace with your command                                                           
+          restartPolicy: OnFailure

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod-with-labels-and-ports
+  labels:
+    app: my-app
+    environment: development
+spec:
+  containers:
+    - name: my-container
+      image: nginx:latest # You can replace this with your desired image
+      ports:
+        - containerPort: 80
+          protocol: TCP

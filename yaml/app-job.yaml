@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gcs-to-disk-copy-job
+  labels:
+    app: gcs-copier
+spec:
+  ttlSecondsAfterFinished: 3600 # Optional: Job will be automatically deleted 1 hour after it finishes (successful or failed)                     
+  backoffLimit: 3 # Optional: Number of retries before considering the Job as failed                                               
+  template:
+    spec:
+      restartPolicy: OnFailure # Or "Never" if you don't want retries on pod failure for this job                                                 
+      # --- GCS Authentication ---                                        
+      # Option 1: Workload Identity (Recommended)                         
+      # Ensure your Kubernetes Service Account (KSA) is annotated and linked to a GCP IAM Service Account (GSA)                                   
+      # that has permissions to read from the GCS bucket.                 
+      # If using Workload Identity, specify the KSA here:                 
+      # serviceAccountName: your-k8s-service-account-name                 
+
+      # Option 2: GCP Service Account Key (JSON file mounted as a secret) 
+      # 1. Create a Kubernetes secret from your GCP service account key:  
+      #    kubectl create secret generic gcp-sa-credentials --from- file=credentials.json=/path/to/your-gcp-sa-key.json                         
+      # 2. If using this method, uncomment the 'env' and 'volumeMounts' for 'gcp-credentials' in the container spec below.                          
+      # 3. Also, uncomment the 'gcp-credentials' volume in the 'volumes' section at the bottom of this manifest.                                     
+      containers:
+        - name: gcs-copy-container
+          image: google/cloud-sdk:slim # Official image with gsutil tool    
+          command: ["/bin/sh", "-c"]
+          args:
+            - "set -o errexit  # Exit immediately if a command exits with a non-zero status.                                                            \nset -o nounset  # Treat unset variables as an error when substituting.                                                               \nset -o pipefail # The return value of a pipeline is the status of the last command to exit with a non-zero status.                         \n                                                              \n# !!! IMPORTANT: Replace these placeholders with your actual values !!!                                                                  \nSOURCE_GCS_PATH=\"gs://YOUR_GCS_BUCKET_NAME/YOUR_SOURCE_FOLDER/\"             \n# This is the destination path *inside* the container, within the mounted volume.                                                         \nDEST_LOCAL_PATH=\"/data_on_pvc/gcs_copied_data/\"               \n                                                              \necho \"Starting GCS copy from ${SOURCE_GCS_PATH} to ${DEST_LOCAL_PATH}...\"                                                      \n                                                              \n# Ensure the destination directory exists within the mounted volume                                                                      \nmkdir -p \"${DEST_LOCAL_PATH}\"                                 \n                                                              \n# Use gsutil to copy data. -m enables multi-threaded/multi-processing copy. -r for recursive.                                          \ngsutil -m cp -r \"${SOURCE_GCS_PATH}\" \"${DEST_LOCAL_PATH}\"     \n                                                              \necho \"GCS copy completed successfully.\"                       \n                                                              \necho \"Listing contents of ${DEST_LOCAL_PATH} to verify:\"      \nls -lah \"${DEST_LOCAL_PATH}\"                                  \n                                                              \n"
+          # --- Mount for the PVC where data will be copied ---             
+          volumeMounts:
+            - name: persistent-storage-volume # This name must match a volume defined in the 'volumes' section                                            
+              mountPath: /data_on_pvc # The DEST_LOCAL_PATH above should be a subdirectory of this, or this path itself.                      
+              # --- Uncomment these for GCS Authentication Option 2 (Service Account Key) ---                                                            
+              # env:                                                            
+              # - name: GOOGLE_APPLICATION_CREDENTIALS                          
+              #   value: /etc/gcp-sa-key/credentials.json # Path to the SA key file inside the container                                                   
+              # volumeMounts:                                                   
+              # - name: persistent-storage-volume # Re-list the data volume mount if not already listed above                                           
+              #   mountPath: /data_on_pvc                                       
+              # - name: gcp-credentials-volume    # Name for the volume holding the SA key                                                                  
+              #   mountPath: /etc/gcp-sa-key    # Directory where the SA key will be mounted                                                             
+              #   readOnly: true                                                
+      volumes:
+        # --- Define the volume that uses your PVC for storing copied data ---
+        - name: persistent-storage-volume
+          persistentVolumeClaim:
+            claimName: YOUR_PVC_NAME # !!! IMPORTANT: Replace with the name of your existing PersistentVolumeClaim                                      
+# --- Uncomment this for GCS Authentication Option 2 (Service Account Key) ---                                                            
+# - name: gcp-credentials-volume                                    
+#   secret:                                                         
+#     secretName: gcp-sa-credentials # Name of the Kubernetes secret you created for the GCP SA key                                              
+#     items:                                                        
+#     - key: credentials.json # The key in the secret data (e.g., if created with --from-file=credentials.json)                                  
+#       path: credentials.json  # The filename for the key when mounted into the pod

@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod-example # You can change this name                         
+spec:
+  containers:
+    - name: my-app-container
+      image: nginx:latest # Using nginx as an example image
+      ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+      livenessProbe:
+        httpGet:
+          path: /
+          port: http # References the port named 'http' above
+        initialDelaySeconds: 15
+        periodSeconds: 20
+        timeoutSeconds: 1
+        successThreshold: 1
+        failureThreshold: 3
+      readinessProbe:
+        httpGet:
+          path: /
+          port: http # References the port named 'http' above
+        initialDelaySeconds: 5
+        periodSeconds: 10
+        timeoutSeconds: 1
+        successThreshold: 1
+        failureThreshold: 3
+      volumeMounts:
+        - name: app-data
+          mountPath: /usr/share/nginx/html # Example mount path for nginx
+    - name: app-data
+      emptyDir: {} # Using an emptyDir volume for simplicity
